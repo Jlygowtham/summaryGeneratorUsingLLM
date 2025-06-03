@@ -5,9 +5,7 @@ from docx import Document
 import pandas as pd
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama.chat_models import ChatOllama
-from markdown_it import MarkdownIt
-# from weasyprint import HTML
-import pypandoc
+from fpdf import FPDF
 
 def newUserService(userData: dict):
     try:
@@ -167,11 +165,20 @@ Instructions:
 - Avoid hallucinating facts or adding hypothetical content.
 
 Formatting:
-- Use professional tone.
-- For PDFs, Word, or TXT: Extract key insights using concise headings and bullet points.
-- For CSV/XLSX: Provide a business-level narrative summary of trends or key data patterns.
-- Focus on clarity and brevity.
-- Give Markdown formatting output with headings (#, ##) and bullet points (-) as appropriate and Emphasize important points with bold text.
+    If the file type is DOCX:
+        - Format your output using basic Markdown syntax that will be converted to a Word document.
+        - Use only the following Markdown elements:
+        - #, ##, ### for headings and subheadings
+        - - for bullet points
+        - **bold text** to emphasize key terms or sections
+        - Do not use any other Markdown (like links, tables, or images).
+        - Keep the summary clear and concise, following this structure:
+            - One main heading for the document title
+            - Section headings (## or ###) to group topics
+            - Bullet points under each section with optional bold keywords
+
+    For other file types (PDF, TXT, CSV, XLSX):
+        - Provide a clean plain-text summary with proper line breaks, bullet-style spacing, and professional tone.
 
 """),
             ("user", "{content}")
@@ -205,8 +212,16 @@ def insertLLMSummary(userid,content,llmresponse,file_type):
 
 def convertSummaryToPdf(userId,response):
     try:
-        output_file = f"{userId}_summary.pdf"
-        pypandoc.convert_text(response, 'pdf', format='md', outputfile=output_file)
+        pdf=FPDF()
+        pdf.add_page()
+        pdf.set_auto_page_break(auto=True,margin=15)
+        pdf.set_font("Arial",size=15)
+
+        for line in response.splitlines():
+            pdf.multi_cell(0, 10, txt=line)
+
+        output_path = f"{userId}_summary.pdf"
+        pdf.output(output_path)
         print("✅ Summary converted to PDF successfully.")
     except Exception as e:
         print("Exception:",e)
@@ -215,7 +230,45 @@ def convertSummaryToDocx(userId,response):
     try:
         doc = Document()
 
-        doc.add_paragraph(response)
+        doc.add_heading("Summary", level=1)
+
+        for line in response.splitlines():
+            line = line.strip()
+
+            if line.startswith("### "):  # H3
+                doc.add_heading(line[4:].strip(), level=3)
+            elif line.startswith("## "):  # H2
+                doc.add_heading(line[3:].strip(), level=2)
+            elif line.startswith("# "):   # H1
+                doc.add_heading(line[2:].strip(), level=1)
+            elif line.startswith("- "):   # Bullet point
+                clean_line = line[2:].strip()
+
+                if "**" in clean_line:
+                    parts = clean_line.split("**")
+                    paragraph = doc.add_paragraph(style="List Bullet")
+                    for i, part in enumerate(parts):
+                        if i % 2 == 1:
+                            run = paragraph.add_run(part)
+                            run.bold = True
+                        else:
+                            paragraph.add_run(part)
+                else:
+                    doc.add_paragraph(clean_line, style="List Bullet")
+
+            elif line:
+                paragraph = doc.add_paragraph()
+
+                if "**" in line:
+                    parts = line.split("**")
+                    for i, part in enumerate(parts):
+                        if i % 2 == 1:
+                            run = paragraph.add_run(part)
+                            run.bold = True
+                        else:
+                            paragraph.add_run(part)
+                else:
+                    paragraph.add_run(line)
         output_path = f"{userId}_summary.docx"
         doc.save(output_path)
         print("✅ Summary converted to .docx successfully.")

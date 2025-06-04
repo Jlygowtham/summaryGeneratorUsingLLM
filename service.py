@@ -118,6 +118,7 @@ def pdfService(user_id,file,file_type):
        pdf=fitz.open(stream=content,filetype='pdf')
        txt=''
        for page in pdf:
+           print("number: ",page.number)
            txt+=page.get_text()
        print("pdf content: ",txt)
 

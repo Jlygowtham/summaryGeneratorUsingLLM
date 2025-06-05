@@ -14,7 +14,7 @@ class postgresDb:
         try:
             self.cur.execute(query,val)
             result = self.cur.fetchall()
-            return {"data":result}
+            return result
         except Exception as e:
             return {"data":e,'status code':400}
 

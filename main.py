@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File,HTTPException, Form
 from pydantic import BaseModel
 import uvicorn
-from service import newUserService,loginService,summaryService
+from service import newUserService,loginService,summaryService,fetchHistoryService
 from uuid import UUID
 
 app=FastAPI()
@@ -74,6 +74,18 @@ async def summaryContent(file: UploadFile = File(...),
         
     except Exception as e:
         return {"error":e,'status code':400}
+    
+
+@app.get("/getHistory")
+async def historySummary(userid: UUID):
+    try:
+        print("userid",userid)
+        if not userid:
+            return {"data":"There is no userid","status code":400}
+        result = fetchHistoryService(userid)
+        return {"data":result,"statusCode":200}
+    except Exception as e:
+        return {"error":e,"status code":400}
 
 if __name__=='__main__':
     uvicorn.run(app,port=8000)

@@ -6,6 +6,8 @@ import pandas as pd
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama.chat_models import ChatOllama
 from fpdf import FPDF
+from docx2pdf import convert
+import os
 
 def newUserService(userData: dict):
     try:
@@ -55,8 +57,6 @@ def loginService(userData:dict):
         values=(email,password)
 
         loginUser=pg.showData(query,values)
-        
-        pg.disconnect()
 
         print("login user status: ",loginUser)
 
@@ -69,6 +69,8 @@ def loginService(userData:dict):
         print(f"Error in loginService function: {e}")
         return {"error":e,"status code":400}
     
+    finally:
+        pg.disconnect()
 
 
 def summaryService(file,file_type,user_id):
@@ -166,7 +168,6 @@ Instructions:
 - Avoid hallucinating facts or adding hypothetical content.
 
 Formatting:
-    If the file type is DOCX:
         - Format your output using basic Markdown syntax that will be converted to a Word document.
         - Use only the following Markdown elements:
         - #, ##, ### for headings and subheadings
@@ -178,9 +179,6 @@ Formatting:
             - Section headings (## or ###) to group topics
             - Bullet points under each section with optional bold keywords
 
-    For other file types (PDF, TXT, CSV, XLSX):
-        - Provide a clean plain-text summary with proper line breaks, bullet-style spacing, and professional tone.
-
 """),
             ("user", "{content}")
         ])
@@ -188,8 +186,9 @@ Formatting:
         chain = prompt | model
         response = chain.invoke({"content": content})
         
-        convertSummaryToDocx(str(userid),response.content)
-        convertSummaryToPdf(str(userid),response.content)
+        docxFilePath=convertSummaryToDocx(str(userid),response.content)
+        pdfFilePath=f"{userid}_summary_pdf.pdf"
+        convertSummaryToPdf(docxFilePath,pdfFilePath)
         print("LLm response:",response)
         return response.content
 
@@ -210,20 +209,22 @@ def insertLLMSummary(userid,content,llmresponse,file_type):
     except Exception as e:
         print("Exception",e)
 
+    finally:
+        pg.disconnect()
 
-def convertSummaryToPdf(userId,response):
+
+def convertSummaryToPdf(input_path,output_dir):
     try:
-        pdf=FPDF()
-        pdf.add_page()
-        pdf.set_auto_page_break(auto=True,margin=15)
-        pdf.set_font("Arial",size=15)
+        if not os.path.exists(input_path):
+            print("There is not path for document. So I can't convert docx to pdf")
+            return
 
-        for line in response.splitlines():
-            pdf.multi_cell(0, 10, txt=line)
+        # if output_dir and not os.path.exists(output_dir):
+        #     os.makedirs(output_dir)
 
-        output_path = f"{userId}_summary.pdf"
-        pdf.output(output_path)
-        print("✅ Summary converted to PDF successfully.")
+        convert(input_path)
+        
+        print("✅ Summary converted document to PDF successfully.")
     except Exception as e:
         print("Exception:",e)
 
@@ -273,9 +274,27 @@ def convertSummaryToDocx(userId,response):
         output_path = f"{userId}_summary.docx"
         doc.save(output_path)
         print("✅ Summary converted to .docx successfully.")
+        return output_path
 
     except Exception as e:
         print("Exception: ",e)
+
+
+def fetchHistoryService(userId):
+    try:
+        query="Select filetype,content,llmsummary from summaryhistory where user_id=%s"
+        pg=postgresDb()
+        result=pg.showData(query,(str(userId),))
+        print("history result: ",result)
+        return result
+
+    except Exception as e:
+        print("Exception",e)
+        return {"Exception":e}
+    
+    finally:
+        pg.disconnect()
+
 
 # pdf, docx -> read, convert bytesIO
 # txt, csv -> read, decode, convert StringIO    
